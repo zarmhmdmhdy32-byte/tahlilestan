@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
@@ -122,6 +121,25 @@ border: 0;
 border-radius: 8px;
 cursor: pointer;
 }
+
+/* ===== رنگ پیام‌ها بر اساس فرستنده ===== */
+.msg.mine {
+  background: #1e7a45;          /* سبز پررنگ برای پیام‌های خودت */
+  border-color: #26a35b;
+  align-self: flex-end;
+  max-width: 80%;
+}
+.msg.mine .username { color: #d7ffe6; }
+.msg.mine .time     { color: #b8f0cd; }
+
+.msg.other {
+  background: #4b1e8a;          /* بنفش پررنگ برای پیام‌های دیگران */
+  border-color: #6a2cb8;
+  align-self: flex-start;
+  max-width: 80%;
+}
+.msg.other .username { color: #e6d4ff; }
+.msg.other .time     { color: #cdb8ff; }
 
 </style>
 </head>
@@ -450,6 +468,8 @@ cursor: pointer;
   function renderMessage(m,all,reactionRows){
     const article = document.createElement("article");
     article.className = "msg";
+    // تعیین رنگ بر اساس فرستنده: سبز برای خودت، بنفش برای دیگران
+    article.classList.add(String(m.user_id) === String(user.id) ? "mine" : "other");
 
     const head = document.createElement("div");
     head.className = "msghead";
@@ -822,6 +842,8 @@ async function loadDmConversation() {
     for (const m of rows) {
       const article = document.createElement("article");
       article.className = "msg";
+      // رنگ بر اساس فرستنده: سبز برای خودت، بنفش برای طرف مقابل
+      article.classList.add(m.sender_id === user.id ? "mine" : "other");
 
       const head = document.createElement("div");
       head.className = "msghead";

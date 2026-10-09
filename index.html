@@ -55,6 +55,47 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:24px}
 header{padding:15px}
 .logo{font-size:21px}
 }
+.profile-card {
+  max-width: 500px;
+  margin: 20px auto;
+  background: #141b2f;
+  border: 1px solid #27324b;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.profile-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: #7c83ff;
+  display: grid;
+  place-items: center;
+  font-size: 32px;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+
+.profile-bio {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+  color: #cbd5f0;
+}
+
+.profile-meta {
+  color: #9ba8c4;
+  font-size: 13px;
+  margin: 12px 0;
+}
+
+.username {
+  cursor: pointer;
+}
+
+.username:hover {
+  text-decoration: underline;
+}
 </style>
 </head>
 <body>
@@ -134,7 +175,32 @@ header{padding:15px}
   </section>
   <div id="globalMessage" class="notice" role="status"></div>
 </main>
+<section id="profileView" class="profile-card" hidden>
+  <div class="profile-avatar" id="profileAvatar">؟</div>
+  <h2 id="profileName">پروفایل کاربر</h2>
 
+  <div class="profile-meta" id="profileJoined"></div>
+
+  <h3>درباره من</h3>
+  <p id="profileBio" class="profile-bio">هنوز بیویی ثبت نشده.</p>
+
+  <div id="editBioArea" hidden>
+    <label for="bioInput">بیوگرافی (حداکثر ۳۰۰ کاراکتر)</label>
+    <textarea id="bioInput" maxlength="300"
+      placeholder="کمی درباره خودت بنویس..."></textarea>
+    <div class="actions">
+      <button id="saveBio">ذخیره بیو</button>
+      <button id="cancelBio" class="secondary">لغو</button>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="editBioButton">ویرایش پروفایل</button>
+    <button id="closeProfile" class="secondary">بستن پروفایل</button>
+  </div>
+
+  <div id="profileMessage" class="notice"></div>
+</section>
 <footer>تحلیلستان · نسخه اولیه</footer>
 
 <script>
@@ -196,7 +262,7 @@ header{padding:15px}
 
   async function ensureProfile(){
     const {data,error} = await db.from("profiles")
-      .select("id,username").eq("id",user.id).maybeSingle();
+      .select("id,username,bio,created_at").eq("id",user.id).maybeSingle();
 
     if(error) throw error;
     if(data){
@@ -211,7 +277,7 @@ header{padding:15px}
 
     const {data:created,error:createError} = await db.from("profiles")
       .insert({id:user.id,username})
-      .select("id,username").single();
+      .select("id,username,bio,created_at").single();
 
     if(createError) throw createError;
     profile = created;
@@ -550,6 +616,95 @@ header{padding:15px}
       });
   }
 
+async function openProfileByUsername(username) {
+  try {
+    say("profileMessage", "در حال دریافت پروفایل...");
+
+    const { data, error } = await db.from("profiles")
+      .select("id,username,bio,created_at")
+      .eq("username", username)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      say("profileMessage", "این پروفایل پیدا نشد.");
+      $("profileView").hidden = false;
+      return;
+    }
+
+    $("profileName").textContent = data.username;
+    $("profileAvatar").textContent =
+      Array.from(data.username)[0] || "?";
+
+    $("profileBio").textContent =
+      data.bio?.trim() || "هنوز بیویی ثبت نشده.";
+
+    $("profileJoined").textContent = data.created_at
+      ? "عضویت از " +
+        new Date(data.created_at).toLocaleDateString("fa-IR")
+      : "";
+
+    const isOwner = data.id === user.id;
+
+    $("editBioButton").hidden = !isOwner;
+    $("editBioArea").hidden = true;
+    $("bioInput").value = data.bio || "";
+    $("profileMessage").textContent = "";
+    $("profileView").hidden = false;
+
+    const { count, error: countError } = await db
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", data.id);
+
+    if (countError) throw countError;
+
+    $("profileJoined").textContent +=
+      " · " + (count || 0) + " پیام";
+
+    $("profileView").scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  } catch (e) {
+    say("profileMessage", "خطا: " + niceError(e));
+  }
+}
+
+async function saveBio() {
+  const bio = $("bioInput").value.trim();
+
+  if (bio.length > 300) {
+    say("profileMessage", "بیو نباید بیشتر از ۳۰۰ کاراکتر باشد.");
+    return;
+  }
+
+  $("saveBio").disabled = true;
+
+  try {
+    const { data, error } = await db.from("profiles")
+      .update({ bio })
+      .eq("id", user.id)
+      .select("id,username,bio,created_at")
+      .single();
+
+    if (error) throw error;
+
+    profile = { ...profile, ...data };
+
+    $("profileBio").textContent =
+      data.bio || "هنوز بیویی ثبت نشده.";
+
+    $("bioInput").value = data.bio || "";
+    $("editBioArea").hidden = true;
+    say("profileMessage", "بیو با موفقیت ذخیره شد! ✅");
+  } catch (e) {
+    say("profileMessage", "ذخیره ناموفق بود: " + niceError(e));
+  } finally {
+    $("saveBio").disabled = false;
+  }
+}
   async function logout(){
     if(channel){
       await db.removeChannel(channel);
@@ -566,7 +721,26 @@ header{padding:15px}
   $("sendButton").onclick = sendMessage;
   $("cancelReply").onclick = clearReply;
   $("logout").onclick = logout;
+$("editBioButton").onclick = () => {
+  $("editBioArea").hidden = false;
+  $("bioInput").focus();
+};
 
+$("saveBio").onclick = saveBio;
+
+$("cancelBio").onclick = () => {
+  $("editBioArea").hidden = true;
+  $("profileMessage").textContent = "";
+};
+
+$("closeProfile").onclick = () => {
+  $("profileView").hidden = true;
+};
+
+$("messages").addEventListener("click", event => {
+  const name = event.target.closest(".username");
+  if (name) openProfileByUsername(name.textContent);
+});
   $("messageInput").addEventListener("keydown",e=>{
     if(e.key==="Enter" && !e.shiftKey){
       e.preventDefault();

@@ -1,0 +1,613 @@
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1020">
+<title>تحلیلستان | گفت‌وگوی آزاد</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#141b2f;--line:#27324b;--text:#edf2ff;--muted:#9ba8c4;--accent:#7c83ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Tahoma,Arial,sans-serif}
+button,input,textarea{font:inherit}
+button{cursor:pointer;border:0;border-radius:10px;padding:10px 14px;background:var(--accent);color:white}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,textarea{width:100%;background:#0d1426;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:12px;outline:none}
+input:focus,textarea:focus{border-color:var(--accent)}
+header{padding:18px max(16px,calc((100% - 1150px)/2));border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo{font-size:24px;font-weight:bold}
+.logo span{color:#969bff}
+.tag{color:var(--muted);font-size:12px;margin-top:6px}
+main{max-width:1150px;margin:22px auto;padding:0 14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+.auth{max-width:430px;margin:36px auto}
+h2{margin-top:0;font-size:19px}
+.field{margin:12px 0}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:7px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.secondary{background:#252e48}
+.notice{font-size:13px;color:var(--muted);line-height:1.9;margin-top:12px;overflow-wrap:anywhere}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.online{font-size:12px;color:#8ce2b3}
+.chatbox{min-height:200px;max-height:58vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:2px}
+.msg{background:#0e162a;border:1px solid var(--line);padding:12px;border-radius:13px;overflow-wrap:anywhere}
+.msghead{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-bottom:8px}
+.username{font-weight:bold;color:#b9bdff}
+.time{font-size:11px;color:var(--muted)}
+.msgbody{white-space:pre-wrap;line-height:1.8;font-size:14px;overflow-wrap:anywhere}
+.replyquote{font-size:12px;color:var(--muted);border-right:3px solid var(--accent);padding:8px;margin-bottom:9px;background:#18213a;border-radius:6px}
+.msgtools{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.small{font-size:11px;padding:6px 8px;background:#252e48}
+.composer{margin-top:14px}
+.composer textarea{resize:vertical;min-height:65px}
+.replying{display:none;background:#242d48;padding:8px;border-radius:8px;font-size:12px;margin-bottom:8px}
+.list{display:flex;flex-direction:column;gap:9px}
+.rankrow{display:flex;justify-content:space-between;gap:8px;padding:10px;background:#0e162a;border-radius:9px;font-size:13px}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:24px}
+[hidden]{display:none!important}
+@media(max-width:760px){
+.layout{grid-template-columns:1fr}
+.side{order:2}
+.chatbox{max-height:52vh}
+header{padding:15px}
+.logo{font-size:21px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">تحلیل<span>ستان</span></div>
+    <div class="tag">گفت‌وگو کن، تحلیل کن، یاد بگیر.</div>
+  </div>
+  <div id="headerStatus" class="tag">در حال اتصال...</div>
+</header>
+
+<main>
+  <section id="authView" class="card auth">
+    <h2 id="authTitle">ورود به تحلیلستان</h2>
+    <div class="field">
+      <label for="email">ایمیل</label>
+      <input id="email" type="email" autocomplete="email" placeholder="ایمیل">
+    </div>
+    <div class="field">
+      <label for="password">رمز عبور (حداقل ۶ کاراکتر)</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="رمز عبور">
+    </div>
+    <div id="usernameField" class="field" hidden>
+      <label for="username">نام کاربری (۳ تا ۲۰ کاراکتر)</label>
+      <input id="username" maxlength="20" autocomplete="username" placeholder="نام کاربری">
+    </div>
+    <div class="actions">
+      <button id="authButton">ورود</button>
+      <button id="switchAuth" class="secondary">ساخت حساب جدید</button>
+    </div>
+    <div id="authMessage" class="notice">برای شروع وارد شو یا حساب بساز.</div>
+  </section>
+
+  <section id="appView" hidden>
+    <div class="topbar">
+      <div>
+        <strong id="welcome"></strong>
+        <div class="tag">به گفت‌وگوی عمومی خوش اومدی.</div>
+      </div>
+      <button id="logout" class="secondary">خروج</button>
+    </div>
+
+    <div class="layout">
+      <section class="card">
+        <div class="topbar">
+          <h2 style="margin:0">💬 چت عمومی</h2>
+          <span class="online">● اتصال زنده</span>
+        </div>
+        <div id="messages" class="chatbox">
+          <div class="notice">در حال دریافت پیام‌ها...</div>
+        </div>
+        <div class="composer">
+          <div id="replying" class="replying"></div>
+          <textarea id="messageInput" maxlength="1000" placeholder="پیامت رو بنویس..."></textarea>
+          <div class="actions">
+            <button id="sendButton">ارسال پیام</button>
+            <button id="cancelReply" class="secondary" hidden>لغو پاسخ</button>
+          </div>
+          <div class="notice">حداکثر ۱۰۰۰ کاراکتر. با احترام گفت‌وگو کنیم.</div>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="card" style="margin-bottom:16px">
+          <h2>📌 پیام‌های سنجاق‌شده</h2>
+          <div class="notice">امکان سنجاق‌کردن با دسترسی مدیریتی در مرحله بعد اضافه می‌شود.</div>
+        </section>
+        <section class="card">
+          <h2>🏆 برترین کاربران</h2>
+          <div id="ranking" class="list">
+            <div class="notice">در حال محاسبه...</div>
+          </div>
+          <div class="notice">بر اساس تعداد پیام‌های ثبت‌شده.</div>
+        </section>
+      </aside>
+    </div>
+  </section>
+  <div id="globalMessage" class="notice" role="status"></div>
+</main>
+
+<footer>تحلیلستان · نسخه اولیه</footer>
+
+<script>
+(() => {
+  // اتصال به پروژه Supabase خودت
+  const SUPABASE_URL = "https://dqeqnwenvfyegeddxrrl.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_LLunSu5S6hDNesvfLxPsPg_R-kgC1wC";
+
+  const $ = id => document.getElementById(id);
+  const emojis = ["❤️","😂","🔥","👍","👎","💀","😍","🤝"];
+
+  let db = null;
+  let user = null;
+  let profile = null;
+  let isSignup = false;
+  let replyTo = null;
+  let channel = null;
+  let loadingMessages = false;
+  let refreshPending = false;
+
+  function say(id,text){
+    $(id).textContent = text || "";
+  }
+
+  function niceError(error){
+    const m = error?.message || "خطایی رخ داد.";
+    if(/Invalid login credentials/i.test(m)) return "ایمیل یا رمز عبور اشتباهه.";
+    if(/Email not confirmed/i.test(m)) return "اول ایمیلت رو تأیید کن و بعد وارد شو.";
+    if(/already registered/i.test(m)) return "این ایمیل قبلاً ثبت‌نام کرده.";
+    if(/duplicate key|unique constraint/i.test(m)) return "این نام کاربری قبلاً گرفته شده.";
+    if(/Invalid user or username/i.test(m)) return "نام کاربری با حساب مطابقت نداره.";
+    if(/row-level security|violates row-level/i.test(m)) return "دسترسی دیتابیس اجازه این کار رو نداد. متن کامل خطا رو بررسی کن.";
+    return m;
+  }
+
+  function showAuth(message=""){
+    $("authView").hidden = false;
+    $("appView").hidden = true;
+    say("authMessage",message);
+    say("headerStatus","ورود کاربران");
+  }
+
+  function showApp(){
+    $("authView").hidden = true;
+    $("appView").hidden = false;
+    say("welcome","سلام، "+profile.username);
+    say("headerStatus","وارد شده‌ای");
+  }
+
+  function setAuthMode(signup){
+    isSignup = signup;
+    $("usernameField").hidden = !signup;
+    $("authTitle").textContent = signup ? "ساخت حساب تحلیلستان" : "ورود به تحلیلستان";
+    $("authButton").textContent = signup ? "ثبت‌نام" : "ورود";
+    $("switchAuth").textContent = signup ? "قبلاً حساب دارم" : "ساخت حساب جدید";
+    $("password").autocomplete = signup ? "new-password" : "current-password";
+    say("authMessage",signup ? "یک نام کاربری یکتا انتخاب کن." : "برای شروع وارد شو.");
+  }
+
+  async function ensureProfile(){
+    const {data,error} = await db.from("profiles")
+      .select("id,username").eq("id",user.id).maybeSingle();
+
+    if(error) throw error;
+    if(data){
+      profile = data;
+      return;
+    }
+
+    const username = (user.user_metadata?.username || "").trim();
+    if(!username){
+      throw new Error("پروفایل پیدا نشد. از حساب خارج شو و دوباره وارد شو؛ اگر حل نشد متن خطا رو بفرست.");
+    }
+
+    const {data:created,error:createError} = await db.from("profiles")
+      .insert({id:user.id,username})
+      .select("id,username").single();
+
+    if(createError) throw createError;
+    profile = created;
+  }
+
+  async function authAction(){
+    const email = $("email").value.trim();
+    const password = $("password").value;
+    const username = $("username").value.trim();
+
+    if(!email || !password){
+      say("authMessage","ایمیل و رمز عبور رو وارد کن.");
+      return;
+    }
+    if(password.length < 6){
+      say("authMessage","رمز عبور باید حداقل ۶ کاراکتر باشه.");
+      return;
+    }
+    if(isSignup && !/^[\p{L}\p{N}_-]{3,20}$/u.test(username)){
+      say("authMessage","نام کاربری باید ۳ تا ۲۰ حرف یا عدد باشد؛ فاصله نذار.");
+      return;
+    }
+
+    $("authButton").disabled = true;
+
+    try{
+      if(isSignup){
+        const {data,error} = await db.auth.signUp({
+          email,
+          password,
+          options:{data:{username}}
+        });
+        if(error) throw error;
+
+        if(!data.session){
+          say("authMessage","ثبت‌نام انجام شد! ایمیلت رو باز کن و لینک تأیید رو بزن، بعد برگرد و وارد شو.");
+        }else{
+          user = data.user;
+          await ensureProfile();
+          await enterApp();
+        }
+      }else{
+        const {data,error} = await db.auth.signInWithPassword({email,password});
+        if(error) throw error;
+        user = data.user;
+        await ensureProfile();
+        await enterApp();
+      }
+    }catch(e){
+      say("authMessage",niceError(e));
+    }finally{
+      $("authButton").disabled = false;
+    }
+  }
+
+  async function enterApp(){
+    showApp();
+    await loadMessages();
+    await loadRanking();
+    subscribeLive();
+  }
+
+  async function loadMessages(){
+    if(loadingMessages){
+      refreshPending = true;
+      return;
+    }
+
+    loadingMessages = true;
+    const box = $("messages");
+
+    try{
+      const {data,error} = await db.from("messages")
+        .select("id,user_id,username,content,created_at,reply_to")
+        .order("created_at",{ascending:false})
+        .limit(100);
+
+      if(error) throw error;
+      const rows = (data || []).reverse();
+      let reactionRows = [];
+
+      if(rows.length){
+        const {data:rdata,error:rerror} = await db.from("reactions")
+          .select("message_id,user_id,emoji")
+          .in("message_id",rows.map(m=>m.id));
+        if(!rerror) reactionRows = rdata || [];
+      }
+
+      box.replaceChildren();
+
+      if(!rows.length){
+        const empty = document.createElement("div");
+        empty.className = "notice";
+        empty.textContent = "هنوز پیامی نیست؛ اولین پیام رو تو بفرست!";
+        box.append(empty);
+      }else{
+        rows.forEach(m=>renderMessage(m,rows,reactionRows));
+      }
+
+      box.scrollTop = box.scrollHeight;
+    }catch(e){
+      box.replaceChildren();
+      const el = document.createElement("div");
+      el.className = "notice";
+      el.textContent = "دریافت پیام‌ها ناموفق بود: "+niceError(e);
+      box.append(el);
+    }finally{
+      loadingMessages = false;
+      if(refreshPending){
+        refreshPending = false;
+        loadMessages();
+      }
+    }
+  }
+
+  function renderMessage(m,all,reactionRows){
+    const article = document.createElement("article");
+    article.className = "msg";
+
+    const head = document.createElement("div");
+    head.className = "msghead";
+
+    const name = document.createElement("span");
+    name.className = "username";
+    name.textContent = m.username;
+
+    const time = document.createElement("span");
+    time.className = "time";
+    time.textContent = new Date(m.created_at).toLocaleString("fa-IR");
+
+    head.append(name,time);
+    article.append(head);
+
+    if(m.reply_to){
+      const original = all.find(x=>String(x.id)===String(m.reply_to));
+      const quote = document.createElement("div");
+      quote.className = "replyquote";
+      quote.textContent = original
+        ? "پاسخ به "+original.username+": "+original.content.slice(0,120)
+        : "در پاسخ به یک پیام";
+      article.append(quote);
+    }
+
+    const body = document.createElement("div");
+    body.className = "msgbody";
+    body.textContent = m.content;
+    article.append(body);
+
+    const tools = document.createElement("div");
+    tools.className = "msgtools";
+
+    const reply = document.createElement("button");
+    reply.className = "small";
+    reply.textContent = "↩ پاسخ";
+    reply.onclick = ()=>setReply(m);
+    tools.append(reply);
+
+    emojis.forEach(emoji=>{
+      const matching = reactionRows.filter(r=>
+        String(r.message_id)===String(m.id) && r.emoji===emoji
+      );
+      const b = document.createElement("button");
+      b.className = "small";
+      b.textContent = emoji+(matching.length ? " "+matching.length : "");
+      if(matching.some(r=>r.user_id===user.id)){
+        b.style.outline = "1px solid #aeb5ff";
+      }
+      b.title = "واکنش "+emoji;
+      b.onclick = ()=>toggleReaction(m.id,emoji,reactionRows);
+      tools.append(b);
+    });
+
+    article.append(tools);
+    $("messages").append(article);
+  }
+
+  async function toggleReaction(messageId,emoji,rows){
+    try{
+      const existing = rows.find(r=>
+        String(r.message_id)===String(messageId) &&
+        r.user_id===user.id && r.emoji===emoji
+      );
+
+      let result;
+      if(existing){
+        result = await db.from("reactions").delete()
+          .eq("message_id",messageId)
+          .eq("user_id",user.id)
+          .eq("emoji",emoji);
+      }else{
+        result = await db.from("reactions").insert({
+          message_id:messageId,
+          user_id:user.id,
+          emoji
+        });
+      }
+
+      if(result.error) throw result.error;
+      await loadMessages();
+    }catch(e){
+      say("globalMessage","واکنش ثبت نشد: "+niceError(e));
+    }
+  }
+
+  function setReply(m){
+    replyTo = m.id;
+    $("replying").style.display = "block";
+    $("replying").textContent = "پاسخ به "+m.username+": "+m.content.slice(0,90);
+    $("cancelReply").hidden = false;
+    $("messageInput").focus();
+  }
+
+  function clearReply(){
+    replyTo = null;
+    $("replying").style.display = "none";
+    $("replying").textContent = "";
+    $("cancelReply").hidden = true;
+  }
+
+  async function sendMessage(){
+    const content = $("messageInput").value.trim();
+    if(!content) return;
+
+    if(content.length>1000){
+      say("globalMessage","پیام خیلی طولانیه.");
+      return;
+    }
+
+    const commands = {
+      "دلار":"قیمت زنده دلار هنوز متصل نشده؛ در مرحله بعد منبع قیمت رو وصل می‌کنیم.",
+      "طلا":"قیمت زنده طلا هنوز متصل نشده؛ در مرحله بعد منبع قیمت رو وصل می‌کنیم.",
+      "تتر":"قیمت زنده تتر هنوز متصل نشده؛ در مرحله بعد منبع قیمت رو وصل می‌کنیم.",
+      "ارز":"فهرست قیمت ارزها بعد از اتصال منبع زنده فعال می‌شه.",
+      "ارز دیجیتال":"قیمت زنده بیت‌کوین، تتر و اتریوم بعد از اتصال منبع فعال می‌شه."
+    };
+
+    if(commands[content]){
+      say("globalMessage",commands[content]);
+      return;
+    }
+
+    $("sendButton").disabled = true;
+
+    try{
+      const payload = {
+        user_id:user.id,
+        username:profile.username,
+        content
+      };
+      if(replyTo!==null) payload.reply_to = replyTo;
+
+      const {error} = await db.from("messages").insert(payload);
+      if(error) throw error;
+
+      $("messageInput").value = "";
+      clearReply();
+      say("globalMessage","");
+      await loadMessages();
+      await loadRanking();
+    }catch(e){
+      say("globalMessage","ارسال پیام ناموفق بود: "+niceError(e));
+    }finally{
+      $("sendButton").disabled = false;
+    }
+  }
+
+  async function loadRanking(){
+    try{
+      const {data,error} = await db.from("messages").select("username");
+      if(error) throw error;
+
+      const counts = {};
+      (data || []).forEach(m=>{
+        counts[m.username] = (counts[m.username] || 0)+1;
+      });
+
+      const ranking = Object.entries(counts)
+        .sort((a,b)=>b[1]-a[1])
+        .slice(0,10);
+
+      const list = $("ranking");
+      list.replaceChildren();
+
+      if(!ranking.length){
+        const empty = document.createElement("div");
+        empty.className = "notice";
+        empty.textContent = "هنوز رتبه‌بندی شکل نگرفته.";
+        list.append(empty);
+        return;
+      }
+
+      ranking.forEach(([name,count],i)=>{
+        const row = document.createElement("div");
+        row.className = "rankrow";
+
+        const left = document.createElement("span");
+        left.textContent = (i+1)+". "+name;
+
+        const right = document.createElement("strong");
+        right.textContent = count+" پیام";
+
+        row.append(left,right);
+        list.append(row);
+      });
+    }catch(e){
+      const list = $("ranking");
+      list.replaceChildren();
+      const err = document.createElement("div");
+      err.className = "notice";
+      err.textContent = "رتبه‌بندی در دسترس نیست: "+niceError(e);
+      list.append(err);
+    }
+  }
+
+  function subscribeLive(){
+    if(channel) db.removeChannel(channel);
+
+    channel = db.channel("public-chat-live")
+      .on("postgres_changes",{
+        event:"*",
+        schema:"public",
+        table:"messages"
+      },()=>{
+        loadMessages();
+        loadRanking();
+      })
+      .on("postgres_changes",{
+        event:"*",
+        schema:"public",
+        table:"reactions"
+      },()=>{
+        loadMessages();
+      })
+      .subscribe(status=>{
+        if(status==="SUBSCRIBED") say("headerStatus","متصل به چت زنده");
+      });
+  }
+
+  async function logout(){
+    if(channel){
+      await db.removeChannel(channel);
+      channel = null;
+    }
+    await db.auth.signOut();
+    user = null;
+    profile = null;
+    showAuth("از حساب خارج شدی.");
+  }
+
+  $("switchAuth").onclick = ()=>setAuthMode(!isSignup);
+  $("authButton").onclick = authAction;
+  $("sendButton").onclick = sendMessage;
+  $("cancelReply").onclick = clearReply;
+  $("logout").onclick = logout;
+
+  $("messageInput").addEventListener("keydown",e=>{
+    if(e.key==="Enter" && !e.shiftKey){
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  if(!window.supabase){
+    showAuth("کتابخانه اتصال بارگذاری نشد. اتصال اینترنت رو بررسی کن.");
+    return;
+  }
+
+  db = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+  db.auth.getSession().then(async ({data,error})=>{
+    if(error){
+      showAuth(niceError(error));
+      return;
+    }
+
+    if(data.session){
+      try{
+        user = data.session.user;
+        await ensureProfile();
+        await enterApp();
+      }catch(e){
+        showAuth("آماده‌سازی حساب ناموفق بود: "+niceError(e));
+      }
+    }else{
+      showAuth();
+    }
+  });
+
+  db.auth.onAuthStateChange((event,session)=>{
+    if(event==="SIGNED_OUT"){
+      user = null;
+      profile = null;
+      showAuth();
+    }
+  });
+})();
+</script>
+</body>
+</html>

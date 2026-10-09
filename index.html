@@ -135,7 +135,7 @@ header{padding:15px}
         <strong id="welcome"></strong>
         <div class="tag">به گفت‌وگوی عمومی خوش اومدی.</div>
       </div>
-      <button id="logout" class="secondary">خروج</button>
+      <div class="actions">   <button id="openInbox" class="secondary">💬 پیام‌های خصوصی</button>   <button id="logout" class="secondary">خروج</button> </div>
     </div>
 
     <div class="layout">
@@ -196,12 +196,39 @@ header{padding:15px}
 
   <div class="actions">
     <button id="editBioButton">ویرایش پروفایل</button>
+    <button id="openPrivateMessage">✉️ پیام خصوصی</button>
     <button id="closeProfile" class="secondary">بستن پروفایل</button>
   </div>
 
   <div id="profileMessage" class="notice"></div>
 </section>
-<footer>تحلیلستان · نسخه اولیه</footer>
+
+<section id="inboxView" class="profile-card" hidden>
+  <h2>💬 پیام‌های خصوصی</h2>
+  <p class="profile-meta">گفتگوهای خصوصی تو</p>
+  <div id="inboxMessage" class="notice"></div>
+  <div id="inboxList" class="list"></div>
+  <button id="closeInbox" class="secondary">بستن</button>
+</section>
+
+<section id="dmView" class="profile-card" hidden>
+  <div class="topbar">
+    <h2 id="dmTitle">گفتگوی خصوصی</h2>
+    <button id="backInbox" class="secondary">بازگشت</button>
+  </div>
+
+  <div id="dmMessages" class="chatbox"></div>
+
+  <div class="composer">
+    <textarea id="dmInput" maxlength="2000"
+      placeholder="پیام خصوصی بنویس..."></textarea>
+    <div class="actions">
+      <button id="dmSend">ارسال پیام</button>
+    </div>
+    <div id="dmStatus" class="notice"></div>
+  </div>
+</section>
+  <footer>تحلیلستان · نسخه اولیه</footer>
 
 <script>
 (() => {
@@ -611,6 +638,18 @@ header{padding:15px}
       },()=>{
         loadMessages();
       })
+      
+.on("postgres_changes", {
+  event: "*",
+  schema: "public",
+  table: "direct_messages"
+}, () => {
+  if (!$("inboxView").hidden) loadInbox();
+
+  if (!$("dmView").hidden && currentDmUser) {
+    loadDmConversation();
+  }
+})
       .subscribe(status=>{
         if(status==="SUBSCRIBED") say("headerStatus","متصل به چت زنده");
       });
@@ -648,6 +687,7 @@ async function openProfileByUsername(username) {
     const isOwner = data.id === user.id;
 
     $("editBioButton").hidden = !isOwner;
+    $("openPrivateMessage").hidden = isOwner;
     $("editBioArea").hidden = true;
     $("bioInput").value = data.bio || "";
     $("profileMessage").textContent = "";
@@ -705,6 +745,192 @@ async function saveBio() {
     $("saveBio").disabled = false;
   }
 }
+  
+let currentDmUser = null;
+
+async function openDM(id, username) {
+  if (!user || id === user.id) return;
+
+  currentDmUser = { id, username };
+
+  $("profileView").hidden = true;
+  $("inboxView").hidden = true;
+  $("dmView").hidden = false;
+  $("dmTitle").textContent = "گفتگو با " + username;
+  $("dmStatus").textContent = "";
+
+  await loadDmConversation();
+  $("dmInput").focus();
+}
+
+async function loadDmConversation() {
+  if (!currentDmUser || !user) return;
+
+  const box = $("dmMessages");
+  box.replaceChildren();
+
+  try {
+    const target = currentDmUser.id;
+
+    const { data, error } = await db
+      .from("direct_messages")
+      .select("id,sender_id,receiver_id,content,created_at,is_read")
+      .or(
+        `and(sender_id.eq.${user.id},receiver_id.eq.${target}),and(sender_id.eq.${target},receiver_id.eq.${user.id})`
+      )
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (error) throw error;
+
+    const rows = (data || []).reverse();
+
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "notice";
+      empty.textContent = "هنوز پیامی ردوبدل نشده؛ تو شروع کن!";
+      box.append(empty);
+    }
+
+    for (const m of rows) {
+      const article = document.createElement("article");
+      article.className = "msg";
+
+      const head = document.createElement("div");
+      head.className = "msghead";
+      head.textContent =
+        (m.sender_id === user.id ? "تو" : currentDmUser.username) +
+        " · " +
+        new Date(m.created_at).toLocaleString("fa-IR");
+
+      const body = document.createElement("div");
+      body.className = "msgbody";
+      body.textContent = m.content;
+
+      article.append(head, body);
+      box.append(article);
+    }
+
+    const unread = rows.filter(
+      m => m.receiver_id === user.id && !m.is_read
+    );
+
+    for (const m of unread) {
+      const { error: readError } = await db.rpc(
+        "mark_direct_message_read",
+        { p_message_id: m.id }
+      );
+
+      if (readError) console.error(readError);
+    }
+
+    box.scrollTop = box.scrollHeight;
+  } catch (e) {
+    say("dmStatus", "دریافت پیام‌ها ناموفق بود: " + niceError(e));
+  }
+}
+
+async function sendPrivateMessage() {
+  const content = $("dmInput").value.trim();
+
+  if (!content || !currentDmUser || !user) return;
+
+  $("dmSend").disabled = true;
+
+  try {
+    const { error } = await db.from("direct_messages").insert({
+      sender_id: user.id,
+      receiver_id: currentDmUser.id,
+      content
+    });
+
+    if (error) throw error;
+
+    $("dmInput").value = "";
+    say("dmStatus", "پیام ارسال شد ✅");
+
+    await loadDmConversation();
+    await loadInbox();
+  } catch (e) {
+    say("dmStatus", "ارسال پیام ناموفق بود: " + niceError(e));
+  } finally {
+    $("dmSend").disabled = false;
+  }
+}
+
+async function loadInbox() {
+  if (!user) return;
+
+  const list = $("inboxList");
+  list.replaceChildren();
+
+  try {
+    const { data, error } = await db
+      .from("direct_messages")
+      .select("id,sender_id,receiver_id,content,created_at,is_read")
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (error) throw error;
+
+    const latest = new Map();
+
+    for (const m of data || []) {
+      const peerId =
+        m.sender_id === user.id ? m.receiver_id : m.sender_id;
+
+      if (!latest.has(peerId)) {
+        latest.set(peerId, {
+          message: m,
+          unread: 0
+        });
+      }
+
+      if (m.receiver_id === user.id && !m.is_read) {
+        latest.get(peerId).unread++;
+      }
+    }
+
+    if (!latest.size) {
+      say("inboxMessage", "هنوز گفتگوی خصوصی نداری.");
+      return;
+    }
+
+    say("inboxMessage", "");
+
+    const peerIds = [...latest.keys()];
+
+    const { data: profiles, error: profileError } = await db
+      .from("profiles")
+      .select("id,username")
+      .in("id", peerIds);
+
+    if (profileError) throw profileError;
+
+    const names = new Map(
+      (profiles || []).map(p => [p.id, p.username])
+    );
+
+    for (const [peerId, item] of latest) {
+      const username = names.get(peerId) || "کاربر";
+      const button = document.createElement("button");
+      button.className = "secondary";
+      button.style.width = "100%";
+      button.style.textAlign = "right";
+
+      button.textContent =
+        username +
+        (item.unread ? ` · ${item.unread} خوانده‌نشده` : "") +
+        "\n" + item.message.content.slice(0, 90);
+
+      button.onclick = () => openDM(peerId, username);
+      list.append(button);
+    }
+  } catch (e) {
+    say("inboxMessage", "دریافت گفتگوها ناموفق بود: " + niceError(e));
+  }
+}
   async function logout(){
     if(channel){
       await db.removeChannel(channel);
@@ -737,6 +963,51 @@ $("closeProfile").onclick = () => {
   $("profileView").hidden = true;
 };
 
+$("openPrivateMessage").onclick = () => {
+  if (!profile) return;
+
+  const username = $("profileName").textContent;
+
+  db.from("profiles")
+    .select("id,username")
+    .eq("username", username)
+    .maybeSingle()
+    .then(({ data, error }) => {
+      if (error || !data) {
+        say("profileMessage", "پروفایل پیدا نشد.");
+        return;
+      }
+
+      openDM(data.id, data.username);
+    });
+};
+
+$("openInbox").onclick = async () => {
+  $("profileView").hidden = true;
+  $("dmView").hidden = true;
+  $("inboxView").hidden = false;
+  await loadInbox();
+};
+
+$("closeInbox").onclick = () => {
+  $("inboxView").hidden = true;
+};
+
+$("backInbox").onclick = async () => {
+  $("dmView").hidden = true;
+  $("inboxView").hidden = false;
+  currentDmUser = null;
+  await loadInbox();
+};
+
+$("dmSend").onclick = sendPrivateMessage;
+
+$("dmInput").addEventListener("keydown", event => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendPrivateMessage();
+  }
+});
 $("messages").addEventListener("click", event => {
   const name = event.target.closest(".username");
   if (name) openProfileByUsername(name.textContent);
